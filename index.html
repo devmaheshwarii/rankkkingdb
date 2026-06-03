@@ -1315,15 +1315,22 @@
         // ╔══════════════════════════════════════════════════════════════════════╗
         // ║  CONFIG                                                               ║
         // ╚══════════════════════════════════════════════════════════════════════╝
-        // ── HARDCODED CONFIG — no localStorage dependency ──────────────────────
-        const DEFAULTS = {
-            url: 'http://46.224.66.162:3001',
-            pat: 'teable_accJmmHKNP6P4OeMNeO_tu1J5Ienfe0+ciSTb4DAQTbHOepDkNmoGVKnXvR7XQo=',
-            table: 'tbl8N2awk4ByXjT0ZGB',
-            kpi: 'tblWsqgyLCOFORXvTmD'
-        };
+        // ── HARDCODED CONFIG ────────────────────────────────────────────────────
+        const TEABLE_BASE = 'http://46.224.66.162:3001';
+        const PAT = 'teable_accJmmHKNP6P4OeMNeO_tu1J5Ienfe0+ciSTb4DAQTbHOepDkNmoGVKnXvR7XQo=';
+        const TABLE_CONTACTS = 'tbl8N2awk4ByXjT0ZGB';
+        const TABLE_KPI = 'tblWsqgyLCOFORXvTmD';
 
-        // Always returns hardcoded config — ignores localStorage completely
+        // CORS proxy — routes HTTP Teable through HTTPS so Netlify can call it
+        // corsproxy.io prepends itself and forwards with CORS headers
+        const USE_PROXY = window.location.protocol === 'https:';
+        const PROXY = 'https://corsproxy.io/?url=';
+
+        function proxyUrl(url) {
+            return USE_PROXY ? PROXY + encodeURIComponent(url) : url;
+        }
+
+        const DEFAULTS = { url: TEABLE_BASE, pat: PAT, table: TABLE_CONTACTS, kpi: TABLE_KPI };
         function cfg() { return { ...DEFAULTS }; }
         function openCfg() { /* settings hidden in hosted mode */ }
         function closeCfg() { document.getElementById('cfg-modal').classList.remove('show'); }
@@ -1337,17 +1344,29 @@
         // ║  API LAYER                                                            ║
         // ╚══════════════════════════════════════════════════════════════════════╝
         async function api(path, params = {}) {
-            const c = cfg();
-            const url = new URL(c.url + path);
-            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-            const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + c.pat } });
-            if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t.slice(0, 200)}`); }
+            const rawUrl = new URL(TEABLE_BASE + path);
+            Object.entries(params).forEach(([k, v]) => rawUrl.searchParams.set(k, String(v)));
+            // Always include PAT as query param — works even if proxy strips Authorization header
+            rawUrl.searchParams.set('token', PAT);
+            const targetUrl = rawUrl.toString();
+            const fetchUrl = USE_PROXY ? PROXY + encodeURIComponent(targetUrl) : targetUrl;
+            const r = await fetch(fetchUrl, {
+                headers: {
+                    'Authorization': 'Bearer ' + PAT,
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (!r.ok) {
+                const t = await r.text();
+                throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
+            }
             return r.json();
         }
 
         // Paginated fetch — calls progressCb(loaded, total) on each page
         async function fetchPage(tableId, skip = 0, take = 500) {
-            return api(`/api/table/${tableId}/record`, { take, skip, fieldKeyType: 'name' });
+            return api(`/api/table/${tableId}/record`, { take: String(take), skip: String(skip), fieldKeyType: 'name' });
         }
 
         // ╔══════════════════════════════════════════════════════════════════════╗
@@ -1358,7 +1377,7 @@
         let RECORDS_TOTAL = 0;            // total count in table (from first API response)
         let RECORDS_LOADED = 0;           // how many we've fetched so far
         let RECORDS_LOADING = false;
-        const INITIAL_LOAD = 500;         // records to fetch on first browser open
+        const INITIAL_LOAD = 1000;         // records to fetch on first browser open
         const LAZY_CHUNK = 2000;        // records per subsequent lazy load
         let FILTERED = [];
         let BR_PAGE = 1;
@@ -1372,38 +1391,52 @@
         // ║  INIT — load KPI summary first, records lazily                       ║
         // ╚══════════════════════════════════════════════════════════════════════╝
         async function init() {
-            const c = cfg();
-            // PAT is hardcoded — always proceed
             try {
-                $('splash-msg').textContent = 'Loading KPI summary…';
-                $('splash-sub').textContent = 'One fast query — then done';
+                $('splash-msg').textContent = 'Connecting to Teable…';
+                $('splash-sub').textContent = 'Loading KPI summary';
 
-                // ── STEP 1: Load KPI summary (small table, instant) ──────────────
-                await loadKPISummary();
-                renderOverview();
+                // STEP 1: Try KPI summary first (fast, ~80 rows)
+                let kpiLoaded = false;
+                try {
+                    await loadKPISummary();
+                    kpiLoaded = Object.keys(KPI).length > 0;
+                } catch (e) {
+                    console.warn('KPI summary load failed:', e.message);
+                }
 
-                // ── STEP 2: Hide splash, show UI immediately ──────────────────────
-                $('splash').style.opacity = '0';
-                setTimeout(() => { $('splash').style.display = 'none'; }, 300);
-
-                // ── STEP 3: Lazy-load first chunk of records in background ────────
-                loadInitialRecords();
+                if (kpiLoaded) {
+                    // KPI table has data — render overview instantly, load records in bg
+                    renderOverview();
+                    $('splash').style.opacity = '0';
+                    setTimeout(() => { $('splash').style.display = 'none'; }, 300);
+                    loadInitialRecords(); // background, non-blocking
+                } else {
+                    // KPI table empty or unreachable — load records first, compute KPIs from them
+                    $('splash-msg').textContent = 'Loading records (first run)…';
+                    $('splash-sub').textContent = 'KPI summary not populated yet — computing live';
+                    await loadInitialRecords(true); // blocking mode on first run
+                    computeKPIsFromRecords();
+                    renderOverview();
+                    $('splash').style.opacity = '0';
+                    setTimeout(() => { $('splash').style.display = 'none'; }, 300);
+                }
 
             } catch (e) {
-                $('splash-msg').textContent = 'Connection error: ' + e.message;
-                $('splash-sub').textContent = '';
+                $('splash-msg').textContent = '⚠ ' + e.message;
+                $('splash-sub').textContent = 'Check that Teable is reachable and PAT is valid';
+                console.error('Init error:', e);
+                // Still hide splash after delay so user isn't stuck
                 setTimeout(() => {
-                    $('splash').style.display = 'none';
-                    $('notice-cfg').style.display = 'flex';
-                    renderEmpty();
-                }, 2000);
+                    $('splash').style.opacity = '0';
+                    setTimeout(() => { $('splash').style.display = 'none'; renderEmpty(); }, 300);
+                }, 3000);
             }
         }
 
         // ── Load all rows from kpi_summary (expected ~80 rows, single call) ───
         async function loadKPISummary() {
             const c = cfg();
-            const d = await fetchPage(c.kpi, 0, 1000);
+            const d = await fetchPage(TABLE_KPI, 0, 1000);
             KPI = {};
             (d.records || []).forEach(rec => {
                 const f = rec.fields || {};
@@ -1425,24 +1458,37 @@
         }
 
         // ── Lazy record loading ───────────────────────────────────────────────
-        async function loadInitialRecords() {
+        async function loadInitialRecords(blocking = false) {
             if (RECORDS_LOADING) return;
             RECORDS_LOADING = true;
             try {
-                const c = cfg();
-                const d = await fetchPage(c.table, 0, INITIAL_LOAD);
-                RECORDS_TOTAL = d.total || 0;
-                const rows = (d.records || []).map(r => r.fields || {});
-                RECORDS = rows;
-                RECORDS_LOADED = rows.length;
-                buildFilterDropdowns();
-                if (document.querySelector('.view.active').id === 'view-browser') {
-                    filterBrowser();
+                const take = blocking ? 2000 : INITIAL_LOAD;
+                if (blocking) {
+                    // Load in chunks with progress updates
+                    let skip = 0, done = false;
+                    while (!done && RECORDS.length < 5000) {
+                        const d = await fetchPage(TABLE_CONTACTS, skip, 1000);
+                        if (!d?.records?.length) break;
+                        RECORDS_TOTAL = d.total || 0;
+                        RECORDS.push(...d.records.map(r => r.fields || {}));
+                        RECORDS_LOADED = RECORDS.length;
+                        $('splash-sub').textContent = 'Loaded ' + n(RECORDS_LOADED) + ' of ' + n(RECORDS_TOTAL);
+                        if (d.records.length < 1000) done = true;
+                        skip += 1000;
+                        await sleep(60);
+                    }
+                } else {
+                    const d = await fetchPage(TABLE_CONTACTS, 0, INITIAL_LOAD);
+                    RECORDS_TOTAL = d.total || 0;
+                    const rows = (d.records || []).map(r => r.fields || {});
+                    RECORDS = rows;
+                    RECORDS_LOADED = rows.length;
                 }
-                // show "load more" if there's more data
+                buildFilterDropdowns();
+                if (document.querySelector('.view.active').id === 'view-browser') filterBrowser();
                 updateLoadMoreBtn();
             } catch (e) {
-                console.warn('Record preload error:', e.message);
+                console.warn('Record load error:', e.message);
             }
             RECORDS_LOADING = false;
         }
@@ -1496,6 +1542,80 @@
         // ╔══════════════════════════════════════════════════════════════════════╗
         // ║  OVERVIEW RENDER — reads from KPI{} only, zero DB calls              ║
         // ╚══════════════════════════════════════════════════════════════════════╝
+
+        // Compute KPI{} directly from loaded RECORDS when kpi_summary table is empty
+        function computeKPIsFromRecords() {
+            const now = new Date().toISOString();
+            const uD = new Set(), uE = new Set(), uL = new Set(), uT = new Set(), uTw = new Set();
+            const niches = {}, positions = {}, sources = {};
+            const roles = { Founder: 0, CEO: 0, CMO: 0, CTO: 0, COO: 0, CFO: 0, 'Business Dev': 0, VP: 0, 'Head / Director': 0, Marketing: 0, Growth: 0, 'Investor / VC': 0 };
+            let chTg = 0, chTw = 0, chEm = 0, chLi = 0;
+
+            for (const r of RECORDS) {
+                const src = r.source || 'Unknown';
+                sources[src] = (sources[src] || 0) + 1;
+                if (r.niche) niches[r.niche] = (niches[r.niche] || 0) + 1;
+                if (r.position) positions[r.position] = (positions[r.position] || 0) + 1;
+                if (r.domain) uD.add(r.domain.toLowerCase().trim());
+                if (r.email) uE.add(r.email.toLowerCase().trim());
+                if (r.linkedin) uL.add(r.linkedin.toLowerCase().replace(/\/$/, ''));
+                if (r.telegram) uT.add(r.telegram.toLowerCase().trim());
+                if (r.twitter) uTw.add(r.twitter.toLowerCase().trim());
+                if (src === 'Telegram Only') chTg++;
+                if (src === 'Twitter Only') chTw++;
+                if (src === 'Email Only') chEm++;
+                if (src === 'LinkedIn Only') chLi++;
+                // role bucket
+                const rb = r.role_bucket;
+                if (rb && roles.hasOwnProperty(rb)) roles[rb]++;
+                else if (r.position) {
+                    const l = r.position.toLowerCase();
+                    if (l.includes('founder') || l.includes('co-founder')) roles['Founder']++;
+                    else if (l.includes('ceo') || l.includes('chief exec')) roles['CEO']++;
+                    else if (l.includes('cmo') || l.includes('chief market')) roles['CMO']++;
+                    else if (l.includes('cto') || l.includes('chief tech')) roles['CTO']++;
+                    else if (l.includes('coo') || l.includes('chief oper')) roles['COO']++;
+                    else if (l.includes('cfo') || l.includes('chief fin')) roles['CFO']++;
+                    else if (l.includes('business dev') || l === 'bd') roles['Business Dev']++;
+                    else if (l.startsWith('vp') || l.includes('vice pres')) roles['VP']++;
+                    else if (l.includes('head of') || l.includes('director')) roles['Head / Director']++;
+                    else if (l.includes('marketing')) roles['Marketing']++;
+                    else if (l.includes('growth')) roles['Growth']++;
+                    else if (l.includes('investor') || l.includes('venture') || l.includes('partner')) roles['Investor / VC']++;
+                }
+            }
+
+            function mk(key, label, value, group, sort = 0) {
+                KPI[key] = { metric_key: key, metric_label: label, metric_value: value, metric_group: group, sort_order: sort, last_computed_at: now };
+            }
+
+            mk('total_prospects', 'Total Prospects', RECORDS_TOTAL || RECORDS.length, 'overview', 1);
+            mk('full_records', 'Full Records', RECORDS.filter(r => r.name || r.email || r.telegram).length, 'overview', 2);
+            mk('unique_domains', 'Unique Domains', uD.size, 'overview', 3);
+            mk('unique_emails', 'Emails', uE.size, 'overview', 4);
+            mk('unique_linkedin', 'LinkedIn Profiles', uL.size, 'overview', 5);
+            mk('unique_telegram', 'Telegram Handles', uT.size, 'overview', 6);
+            mk('unique_twitter', 'Twitter / X Handles', uTw.size, 'overview', 7);
+            mk('unique_positions', 'Unique Positions', Object.keys(positions).length, 'overview', 8);
+            mk('unique_niches', 'Unique Niches', Object.keys(niches).length, 'overview', 9);
+            mk('ch_telegram_only', 'Telegram Only', chTg, 'channel_only', 1);
+            mk('ch_twitter_only', 'Twitter Only', chTw, 'channel_only', 2);
+            mk('ch_email_only', 'Email Only', chEm, 'channel_only', 3);
+            mk('ch_linkedin_only', 'LinkedIn Only', chLi, 'channel_only', 4);
+            let rs = 1;
+            for (const [label, count] of Object.entries(roles))
+                mk('role_' + label.toLowerCase().replace(/[^a-z0-9]/g, '_'), label, count, 'roles', rs++);
+            for (const [label, val] of Object.entries(niches).sort((a, b) => b[1] - a[1]))
+                mk('niche_' + label.toLowerCase().replace(/[^a-z0-9]/g, '_'), label, val, 'niches');
+            let ps = 1;
+            for (const [label, val] of Object.entries(positions).sort((a, b) => b[1] - a[1]).slice(0, 50))
+                mk('pos_' + ps, label, val, 'positions', ps++);
+            for (const [label, val] of Object.entries(sources).sort((a, b) => b[1] - a[1]))
+                mk('src_' + label.toLowerCase().replace(/[^a-z0-9]/g, '_'), label, val, 'sources');
+
+            console.log('KPIs computed from records:', Object.keys(KPI).length);
+        }
+
         function renderEmpty() {
             ['ov-total', 'ov-domain', 'ov-email', 'ov-linkedin', 'ov-telegram', 'ov-twitter',
                 'co-tg', 'co-tw', 'co-em', 'co-li'].forEach(id => { const el = $(id); if (el) el.textContent = '—'; });
