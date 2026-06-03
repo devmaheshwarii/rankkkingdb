@@ -1323,11 +1323,15 @@
 
         // CORS proxy — routes HTTP Teable through HTTPS so Netlify can call it
         // corsproxy.io prepends itself and forwards with CORS headers
-        const USE_PROXY = window.location.protocol === 'https:';
-        const PROXY = 'https://corsproxy.io/?url=';
+        const IS_HTTPS = window.location.protocol === 'https:';
 
-        function proxyUrl(url) {
-            return USE_PROXY ? PROXY + encodeURIComponent(url) : url;
+        // allorigins wraps the response in { contents, status } — handles CORS + preflight
+        // It does NOT strip Authorization headers unlike corsproxy
+        const ALLORIGINS = 'https://api.allorigins.win/raw?url=';
+
+        function proxyUrl(rawUrl) {
+            if (!IS_HTTPS) return rawUrl;
+            return ALLORIGINS + encodeURIComponent(rawUrl);
         }
 
         const DEFAULTS = { url: TEABLE_BASE, pat: PAT, table: TABLE_CONTACTS, kpi: TABLE_KPI };
@@ -1344,24 +1348,42 @@
         // ║  API LAYER                                                            ║
         // ╚══════════════════════════════════════════════════════════════════════╝
         async function api(path, params = {}) {
+            // Build the raw Teable URL — NO token in query string (causes double-encoding via proxy)
             const rawUrl = new URL(TEABLE_BASE + path);
             Object.entries(params).forEach(([k, v]) => rawUrl.searchParams.set(k, String(v)));
-            // Always include PAT as query param — works even if proxy strips Authorization header
-            rawUrl.searchParams.set('token', PAT);
-            const targetUrl = rawUrl.toString();
-            const fetchUrl = USE_PROXY ? PROXY + encodeURIComponent(targetUrl) : targetUrl;
-            const r = await fetch(fetchUrl, {
-                headers: {
-                    'Authorization': 'Bearer ' + PAT,
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-            if (!r.ok) {
-                const t = await r.text();
-                throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
+            const teableUrl = rawUrl.toString();
+
+            if (!IS_HTTPS) {
+                // Local / HTTP — call Teable directly
+                const r = await fetch(teableUrl, {
+                    headers: { 'Authorization': 'Bearer ' + PAT }
+                });
+                if (!r.ok) { throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 200)); }
+                return r.json();
             }
-            return r.json();
+
+            // HTTPS (Vercel) — use allorigins proxy
+            // allorigins is a GET-only proxy; it fetches the URL server-side and returns the body
+            // We cannot send custom headers through allorigins, so we embed the token in the URL
+            // Teable accepts ?token= as an alternative to Authorization header
+            // IMPORTANT: encode the PAT manually to avoid double-encoding
+            const patEncoded = encodeURIComponent(PAT); // single encode — allorigins won't re-encode
+            const urlWithToken = teableUrl + (teableUrl.includes('?') ? '&' : '?') + 'token=' + patEncoded;
+            const proxyUrl = ALLORIGINS + encodeURIComponent(urlWithToken);
+
+            const r = await fetch(proxyUrl);
+            if (!r.ok) { throw new Error('Proxy error ' + r.status); }
+            const text = await r.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                // allorigins sometimes wraps in {contents,status} if raw fails
+                try {
+                    const wrapped = JSON.parse(text);
+                    if (wrapped.contents) return JSON.parse(wrapped.contents);
+                } catch (_) { }
+                throw new Error('Bad JSON from proxy: ' + text.slice(0, 200));
+            }
         }
 
         // Paginated fetch — calls progressCb(loaded, total) on each page
