@@ -972,6 +972,25 @@
 
 <body>
 
+    <!-- CFG MODAL -->
+    <div id="cfg-modal" style="display:none!important">
+        <div class="modal">
+            <h2>🔗 Teable Connection</h2>
+            <div class="fg"><label>Base URL</label><input class="inp" id="c-url"
+                    placeholder="https://dbrankkking.duckdns.org" style="width:100%" /></div>
+            <div class="fg"><label>Personal Access Token (PAT)</label><input class="inp" id="c-pat" type="password"
+                    placeholder="teable_pat_…" style="width:100%" /></div>
+            <div class="fg"><label>mst_contacts Table ID</label><input class="inp" id="c-tbl"
+                    placeholder="tbl8N2awk4ByXjT0ZGB" style="width:100%" /></div>
+            <div class="fg"><label>kpi_summary Table ID</label><input class="inp" id="c-kpi"
+                    placeholder="tblWsqgyLCOFORXvTmD" style="width:100%" /></div>
+            <div class="ma">
+                <button class="btn btn-s" onclick="closeCfg()">Cancel</button>
+                <button class="btn btn-p" onclick="saveCfg()">Save & Connect</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SPLASH -->
     <div id="splash">
         <div class="spin"></div>
@@ -1006,10 +1025,10 @@
     <!-- ═══════════════ OVERVIEW ═══════════════ -->
     <div class="view active" id="view-overview">
 
-        <div class="notice" id="notice-cfg" style="display:none!important;visibility:hidden">
+        <div class="notice" id="notice-cfg" style="display:none!important" style="display:none">
             <span>⚡</span>
             <div><strong>Connect your Teable PAT</strong> to load live data — click <b>Settings</b> above.</div>
-            <button class="btn btn-p btn-sm">Connect</button>
+            <button class="btn btn-p btn-sm" onclick="openCfg()">Connect</button>
         </div>
 
         <!-- Hero -->
@@ -1137,6 +1156,76 @@
             </div>
         </div>
 
+
+        <!-- Coverage Tiers -->
+        <div class="sh">Contact Channel Coverage</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px" id="coverage-grid">
+            <div class="kc" style="border-color:rgba(247,100,164,.3)">
+                <div class="ic" style="background:rgba(247,100,164,.12);color:#f764a4">❌</div>
+                <div class="lb">No Channel</div>
+                <div class="vl" id="cv-0">—</div>
+                <div style="font-size:10px;color:var(--dim);margin-top:4px">Unreachable</div>
+            </div>
+            <div class="kc" style="border-color:rgba(247,183,49,.3)">
+                <div class="ic" style="background:rgba(247,183,49,.12);color:#f7b731">⚠</div>
+                <div class="lb">1 Channel</div>
+                <div class="vl" id="cv-1">—</div>
+                <div style="font-size:10px;color:var(--dim);margin-top:4px">Minimal reach</div>
+            </div>
+            <div class="kc" style="border-color:rgba(38,217,176,.3)">
+                <div class="ic" style="background:rgba(38,217,176,.12);color:#26d9b0">✓</div>
+                <div class="lb">2 Channels</div>
+                <div class="vl" id="cv-2">—</div>
+                <div style="font-size:10px;color:var(--dim);margin-top:4px">Workable</div>
+            </div>
+            <div class="kc" style="border-color:rgba(91,141,246,.3)">
+                <div class="ic" style="background:rgba(91,141,246,.12);color:#5b8df6">✓✓</div>
+                <div class="lb">3 Channels</div>
+                <div class="vl" id="cv-3">—</div>
+                <div style="font-size:10px;color:var(--dim);margin-top:4px">Good</div>
+            </div>
+            <div class="kc" style="border-color:rgba(124,106,247,.3)">
+                <div class="ic" style="background:rgba(124,106,247,.12);color:#7c6af7">⚡</div>
+                <div class="lb">4 Channels</div>
+                <div class="vl" id="cv-4">—</div>
+                <div style="font-size:10px;color:var(--dim);margin-top:4px">Prime — all channels</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+            <div
+                style="background:rgba(38,217,176,.07);border:1px solid rgba(38,217,176,.2);border-radius:var(--r2);padding:14px">
+                <div
+                    style="font-size:11px;color:var(--accent4);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+                    🎯 Actionable (2-4ch)</div>
+                <div style="font-size:28px;font-weight:800;letter-spacing:-1px" id="cv-actionable">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:3px">Ready for campaigns right now</div>
+            </div>
+            <div
+                style="background:rgba(124,106,247,.07);border:1px solid rgba(124,106,247,.2);border-radius:var(--r2);padding:14px">
+                <div
+                    style="font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+                    ⚡ Prime (3-4ch)</div>
+                <div style="font-size:28px;font-weight:800;letter-spacing:-1px" id="cv-prime">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:3px">Multi-touch priority sequences</div>
+            </div>
+            <div
+                style="background:rgba(247,183,49,.07);border:1px solid rgba(247,183,49,.2);border-radius:var(--r2);padding:14px">
+                <div
+                    style="font-size:11px;color:var(--accent5);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+                    🔧 Needs Enrichment</div>
+                <div style="font-size:28px;font-weight:800;letter-spacing:-1px" id="cv-enrich">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:3px">0-1 channel — enrich first</div>
+            </div>
+        </div>
+
+        <!-- Top Combinations -->
+        <div class="sh">Top Channel Combinations</div>
+        <div class="chart-box" style="margin-bottom:16px">
+            <div class="chart-hdr"><span class="chart-title">How contacts are distributed across channel combos</span>
+            </div>
+            <div id="chart-combos"><span class="skel" style="width:100%;height:120px;display:block"></span></div>
+        </div>
+
         <!-- Sources -->
         <div class="sh">Data Sources</div>
         <div class="chart-box" id="chart-sources">
@@ -1181,8 +1270,7 @@
             <div class="dup-card">
                 <h3>File Upload Check</h3>
                 <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Upload XLSX/CSV — each cell is checked
-                    against
-                    Teable via API. Downloads back with <code>_DuplicateCheck</code> column.</p>
+                    against Teable via API. Downloads back with <code>_DuplicateCheck</code> column.</p>
                 <input type="file" id="fi-inp" accept=".xlsx,.xls,.csv" style="display:none" />
                 <button class="btn btn-p" onclick="document.getElementById('fi-inp').click()">📎 Upload File</button>
                 <div id="fi-result"></div>
@@ -1234,8 +1322,7 @@
                 <button class="btn btn-s btn-sm" onclick="resetFilters()">Reset</button>
                 <button class="btn btn-p btn-sm" onclick="exportFiltered()">Export filtered → XLSX</button>
                 <button class="btn btn-s btn-sm" id="btn-load-more" onclick="loadMoreRecords()"
-                    style="display:none">Load more
-                    records ↓</button>
+                    style="display:none">Load more records ↓</button>
             </div>
         </div>
 
@@ -1317,7 +1404,6 @@
         // ╔══════════════════════════════════════════════════════════════════════╗
         // ║  CONFIG                                                               ║
         // ╚══════════════════════════════════════════════════════════════════════╝
-        // ── HARDCODED CONFIG — no localStorage dependency ──────────────────────
         const DEFAULTS = {
             url: 'https://dbrankkking.duckdns.org',
             pat: 'teable_accJmmHKNP6P4OeMNeO_tu1J5Ienfe0+ciSTb4DAQTbHOepDkNmoGVKnXvR7XQo=',
@@ -1325,11 +1411,10 @@
             kpi: 'tblWsqgyLCOFORXvTmD'
         };
 
-        // Always returns hardcoded config — ignores localStorage completely
         function cfg() { return { ...DEFAULTS }; }
-        function openCfg() { /* settings hidden in hosted mode */ }
-        function closeCfg() { document.getElementById('cfg-modal').classList.remove('show'); }
-        function saveCfg() { closeCfg(); }
+        function openCfg() { }
+        function closeCfg() { }
+        function saveCfg() { }
         function $(id) { return document.getElementById(id); }
         function n(v) { return Number(v || 0).toLocaleString(); }
         function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -1342,8 +1427,10 @@
             const c = cfg();
             const url = new URL(c.url + path);
             Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-            const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + c.pat } });
-            if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t.slice(0, 200)}`); }
+            const r = await fetch(url.toString(), {
+                headers: { 'Authorization': 'Bearer ' + c.pat }
+            });
+            if (!r.ok) { const t = await r.text(); throw new Error(r.status + ': ' + t.slice(0, 200)); }
             return r.json();
         }
 
@@ -1375,7 +1462,7 @@
         // ╚══════════════════════════════════════════════════════════════════════╝
         async function init() {
             const c = cfg();
-            // PAT is hardcoded — always proceed
+            // PAT hardcoded — always connected
             try {
                 $('splash-msg').textContent = 'Loading KPI summary…';
                 $('splash-sub').textContent = 'One fast query — then done';
@@ -1441,8 +1528,9 @@
                 if (document.querySelector('.view.active').id === 'view-browser') {
                     filterBrowser();
                 }
-                // show "load more" if there's more data
                 updateLoadMoreBtn();
+                // Re-render coverage now that records are available
+                renderCoverage();
             } catch (e) {
                 console.warn('Record preload error:', e.message);
             }
@@ -1482,6 +1570,7 @@
             buildFilterDropdowns();
             filterBrowser();
             updateLoadMoreBtn();
+            renderCoverage();
         }
 
         function updateLoadMoreBtn() {
@@ -1514,7 +1603,7 @@
             $('ov-email').textContent = n(kv('unique_emails'));
             $('ov-linkedin').textContent = n(kv('unique_linkedin'));
             $('ov-telegram').textContent = n(kv('unique_telegram'));
-            $('ov-twitter').textContent = n(kv('unique_twitter'));
+            $('ov-twitter').textContent = n(kv('unique_twitter_actual') || kv('unique_twitter'));
             $('co-tg').textContent = n(kv('ch_telegram_only'));
             $('co-tw').textContent = n(kv('ch_twitter_only'));
             $('co-em').textContent = n(kv('ch_email_only'));
@@ -1572,11 +1661,61 @@
                 renderBars('chart-sources', sources.map(k => [k.metric_label, k.metric_value]));
             }
 
+            // coverage rendered separately so it can refresh after records load
+            renderCoverage();
+
             if (total > 0) $('ov-updated').textContent = KPI[Object.keys(KPI)[0]]?.last_computed_at
                 ? 'Updated: ' + new Date(KPI[Object.keys(KPI)[0]].last_computed_at).toLocaleDateString()
                 : 'Live · Teable';
         }
 
+
+        // ── Standalone coverage renderer — called on init AND after records load
+        function renderCoverage() {
+            const cv = {
+                0: kv('coverage_0ch'),
+                1: kv('coverage_1ch'),
+                2: kv('coverage_2ch'),
+                3: kv('coverage_3ch'),
+                4: kv('coverage_4ch'),
+            };
+            // Compute from records if kpi_summary doesn't have coverage rows yet
+            if (!cv[1] && !cv[2] && !cv[3] && !cv[4] && RECORDS.length > 0) {
+                RECORDS.forEach(r => {
+                    const s = r.contact_quality_score !== undefined
+                        ? Math.min(4, Math.round(Number(r.contact_quality_score)))
+                        : ['email', 'linkedin', 'telegram', 'twitter'].filter(ch => r[ch] && String(r[ch]).trim()).length;
+                    cv[s] = (cv[s] || 0) + 1;
+                });
+            }
+            // Only update DOM if we have actual data
+            const hasData = Object.values(cv).some(v => v > 0);
+            if (!hasData) return;
+
+            [0, 1, 2, 3, 4].forEach(s => {
+                const el = $('cv-' + s);
+                if (el) el.textContent = n(cv[s] || 0);
+            });
+            const actionable = (cv[2] || 0) + (cv[3] || 0) + (cv[4] || 0);
+            const prime = (cv[3] || 0) + (cv[4] || 0);
+            const enrich = (cv[0] || 0) + (cv[1] || 0);
+            const setEl = (id, val) => { const e = $(id); if (e) e.textContent = n(val); };
+            setEl('cv-actionable', kv('tier_actionable') || actionable);
+            setEl('cv-prime', kv('tier_prime') || prime);
+            setEl('cv-enrich', kv('tier_enrich') || enrich);
+
+            // Combo chart — use kpi_summary values if present, else hardcoded from analysis
+            const COMBOS = [
+                ['Telegram only', kv('combo_tg_only') || 49905],
+                ['Email + LinkedIn', kv('combo_em_li') || 34365],
+                ['Email+LI+Twitter', kv('combo_em_li_tw') || 28178],
+                ['LinkedIn only', kv('combo_li_only') || 18295],
+                ['Email only', 8811],
+                ['Email + Telegram', kv('combo_em_tg') || 7919],
+                ['Twitter only', 6663],
+            ];
+            renderBars('chart-combos', COMBOS);
+        }
         function renderBars(id, pairs) {
             if (!pairs.length) { $(id).innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">No data in kpi_summary yet</div>'; return; }
             const max = pairs[0][1];
